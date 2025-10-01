@@ -11,7 +11,7 @@ In this project, we create a functional software that allows to have an in-house
 **Type:** Final qualifying work  
 **DOI:**  
 **Year:**  
-**Language**: Russian, English
+**Language**: Russian, English  
 **More About This Project:** [Wiki Page](https://github.com/AleksandrovaUV/Yo-Yo_AI-Personal-Trainer/wiki)
 
 ## Content
