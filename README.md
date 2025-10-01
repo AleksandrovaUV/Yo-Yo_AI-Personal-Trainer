@@ -12,6 +12,7 @@ In this project, we create a functional software that allows to have an in-house
 **DOI:**  
 **Year:**  
 **Language**: Russian, English
+**More About This Project:** [Wiki Page](https://github.com/AleksandrovaUV/Yo-Yo_AI-Personal-Trainer/wiki)
 
 ## Content
 
