@@ -93,60 +93,67 @@ cv.imwrite("pose_output.png", estimated_image)
 # из предзагруженных видео
 
 
-# cap = cv.VideoCapture("yoga_poses2.mp4")
-# #cap = cv.VideoCapture(0)
+cap = cv.VideoCapture("/workspaces/Yo-Yo_AI-Personal-Trainer/model_0.0/yoga_poses2.mp4")
 
+# Проверка первого кадра для определения размеров
+hasFrame, frame = cap.read()
+if not hasFrame or frame is None:
+    print("Ошибка: не удалось считать первый кадр.")
+    cap.release()
+    exit()
 
-# if not cap.isOpened():
-#     cap = cv.VideoCapture(0)
-# if not cap.isOpened():
-#     raise IOError("CannotOpenVideo")
-    
-# while cv.waitKey(1) < 0:
-#     hasFrame, frame = cap.read()
-#     if not hasFrame:
-#         cv.waitKey()
-#         break
-    
-#     frameWidth = frame.shape[1]
-#     frameHeight = frame.shape[0]
-#     net.setInput(cv.dnn.blobFromImage(frame, 1.0, (width, height), (127.5, 127.5, 127.5), swapRB = True, crop = False)) # 255 / 2
-#     out = net.forward()
-#     out = out[:, :19, :, :]
+frameWidth = frame.shape[1]
+frameHeight = frame.shape[0]
 
-#     assert(len(BODY_PARTS) <= out.shape[1])
+# Инициализация видеозаписи
+fourcc = cv.VideoWriter_fourcc(*'mp4v')
+video_out = cv.VideoWriter('output_pose.mp4', fourcc, 30.0, (frameWidth, frameHeight))
 
-#     points = []
-#     for i in range(len(BODY_PARTS)):
-#         heatMap = out[0, i, :, :]
+# Возврат к началу видео
+cap.set(cv.CAP_PROP_POS_FRAMES, 0)
 
-#         _, conf, _, point = cv.minMaxLoc(heatMap)
-#         x = (frameWidth * point[0]) / out.shape[3]
-#         y = (frameHeight * point[1]) / out.shape[2]
+while True:
+    hasFrame, frame = cap.read()
+    if not hasFrame or frame is None:
+        print("Видео завершено или кадр не считан.")
+        break
 
-#         points.append((int(x), int(y)) if conf > thr else None)
+    frameWidth = frame.shape[1]
+    frameHeight = frame.shape[0]
 
-#     for pair in POSE_PAIRS:
-#         partFrom = pair[0]
-#         partTo = pair[1]
-#         assert(partFrom in BODY_PARTS)
-#         assert(partTo in BODY_PARTS)
+    # Подготовка входного изображения для нейросети
+    blob = cv.dnn.blobFromImage(frame, 1.0, (width, height),
+                                (127.5, 127.5, 127.5), swapRB=True, crop=False)
+    net.setInput(blob)
+    output = net.forward()
+    output = output[:, :19, :, :]
 
-#         idFrom = BODY_PARTS[partFrom]
-#         idTo = BODY_PARTS[partTo]
+    if len(BODY_PARTS) > output.shape[1]:
+        print("Ошибка: число BODY_PARTS превышает число каналов в выходе сети.")
+        break
 
-#         if points[idFrom] and points[idTo]:
-#             cv.line(frame, points[idFrom], points[idTo], (0, 255, 0), 10)
-#             cv.ellipse(frame, points[idFrom], (3, 3), 0, 0, 360, (0, 0, 255), cv.FILLED)
-#             cv.ellipse(frame, points[idTo], (3, 3), 0, 0, 360, (0, 0, 255), cv.FILLED)
-            
-#     t, _ = net.getPerfProfile()
-#     freq = cv.getTickFrequency() / 1000
-#     cv.putText(frame, '%.2fms' % (t / freq), (10, 20), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0))
+    points = []
+    for i in range(len(BODY_PARTS)):
+        heatMap = output[0, i, :, :]
+        _, conf, _, point = cv.minMaxLoc(heatMap)
+        x = int((frameWidth * point[0]) / output.shape[3])
+        y = int((frameHeight * point[1]) / output.shape[2])
+        points.append((x, y) if conf > thr else None)
 
+    for pair in POSE_PAIRS:
+        partFrom, partTo = pair
+        if partFrom in BODY_PARTS and partTo in BODY_PARTS:
+            idFrom = BODY_PARTS[partFrom]
+            idTo = BODY_PARTS[partTo]
+            if points[idFrom] and points[idTo]:
+                cv.line(frame, points[idFrom], points[idTo], (0, 255, 0), 2)
+                cv.ellipse(frame, points[idFrom], (3, 3), 0, 0, 360, (0, 0, 255), cv.FILLED)
+                cv.ellipse(frame, points[idTo], (3, 3), 0, 0, 360, (0, 0, 255), cv.FILLED)
 
-#     cv.namedWindow("yoga poses estimation", cv.WINDOW_NORMAL)  # позволяет изменять размер окна
-#     cv.resizeWindow("yoga poses estimation", 900, 600)  # задаёт размер окна
+    # Запись обработанного кадра
+    video_out.write(frame)
 
-#     cv.imshow("yoga poses estimation", frame)
-    
+# Освобождение ресурсов
+cap.release()
+video_out.release()
+cv.destroyAllWindows()
