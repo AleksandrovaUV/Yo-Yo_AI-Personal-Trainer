@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 net = cv.dnn.readNetFromTensorflow("graph_opt.pb") # веса
 
-thr = 0.1 # порог уверенности (confidence threshold)
+thr = 0.2 # порог уверенности (confidence threshold)
 
 # иземенение размера изображения
 width =368
