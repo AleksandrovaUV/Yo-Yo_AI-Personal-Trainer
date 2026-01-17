@@ -1,46 +1,45 @@
+import os
+from PIL import Image
 
-import cv2 as cv
-import numpy as np
-import mediapipe as mp
+INPUT_DIR = "data"
+OUTPUT_DIR = "prepared_data"
+TARGET_SIZE = 720 
 
-from mediapipe.tasks import python
-from mediapipe.tasks.python import vision
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# путь к модели .task
-model_path = r"model_0.0\pose_landmarker_full.task"
+def normalize_image(path_in, path_out):
+    img = Image.open(path_in).convert("RGB")
+    w, h = img.size
+    scale = TARGET_SIZE / max(w, h)
+    new_size = (int(w * scale), int(h * scale))
+    img = img.resize(new_size, Image.LANCZOS)
+    img.save(path_out)
 
-# создаём детектор позы
-base_options = python.BaseOptions(model_asset_path=model_path)
-options = vision.PoseLandmarkerOptions(
-    base_options=base_options,
-    output_segmentation_masks=False
-)
-detector = vision.PoseLandmarker.create_from_options(options)
+file_list = []
 
-# функция рисования
-def draw_landmarks_on_image(rgb_image, detection_result):
-    annotated_image = rgb_image.copy()
+print("INPUT_DIR =", os.path.abspath(INPUT_DIR))
+print("Содержимое:", os.listdir(INPUT_DIR))
 
-    if detection_result.pose_landmarks:
-        for landmarks in detection_result.pose_landmarks:
-            for lm in landmarks:
-                h, w, _ = annotated_image.shape
-                cx, cy = int(lm.x * w), int(lm.y * h)
-                cv.circle(annotated_image, (cx, cy), 20, (0, 255, 0), -1)
+for ftype in os.listdir(INPUT_DIR):
+    ftype_path = os.path.join(INPUT_DIR, ftype)
+    if not os.path.isdir(ftype_path):
+        continue
 
-    return annotated_image
+    for pose in os.listdir(ftype_path):
+        pose_path = os.path.join(ftype_path, pose)
+        if not os.path.isdir(pose_path):
+            continue
 
-# загрузка изображения
-img = cv.imread(r"model_0.0\pose.png")
-rgb = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+        output_pose_dir = os.path.join(OUTPUT_DIR, ftype, pose) 
+        os.makedirs(output_pose_dir, exist_ok=True)
 
-# создаём входной объект
-mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        for fname in os.listdir(pose_path):
 
-# детекция
-result = detector.detect(mp_image)
+            if fname.lower().endswith((".jpg", ".jpeg", ".png")):
+                src = os.path.join(pose_path, fname)
+                dst = os.path.join(output_pose_dir, fname)
+                normalize_image(src, dst)
+                file_list.append(dst)
 
-# рисуем
-annotated = draw_landmarks_on_image(img, result)
+print("Готово. Количество изображений:", len(file_list))
 
-cv.imwrite(r"model_0.0\mediapipe_annotated_pose.png", annotated)
