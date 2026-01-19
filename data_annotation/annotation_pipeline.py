@@ -1,24 +1,26 @@
+import cv2 as cv
+import numpy as np
+import mediapipe as mp
 import os
-from PIL import Image
+import json
 
-INPUT_DIR = "data"
-OUTPUT_DIR = "prepared_data"
-TARGET_SIZE = 720 
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+# путь к модели .task
+model_path = r"model_0.0\pose_landmarker_full.task"
 
-def normalize_image(path_in, path_out):
-    img = Image.open(path_in).convert("RGB")
-    w, h = img.size
-    scale = TARGET_SIZE / max(w, h)
-    new_size = (int(w * scale), int(h * scale))
-    img = img.resize(new_size, Image.LANCZOS)
-    img.save(path_out)
+INPUT_DIR = "prepared_data" 
 
-file_list = []
+# детектор позы
+base_options = python.BaseOptions(model_asset_path=model_path)
+options = vision.PoseLandmarkerOptions(
+    base_options=base_options,
+    output_segmentation_masks=False
+)
+detector = vision.PoseLandmarker.create_from_options(options)
 
-print("INPUT_DIR =", os.path.abspath(INPUT_DIR))
-print("Содержимое:", os.listdir(INPUT_DIR))
+annotations = []
 
 for ftype in os.listdir(INPUT_DIR):
     ftype_path = os.path.join(INPUT_DIR, ftype)
@@ -30,16 +32,35 @@ for ftype in os.listdir(INPUT_DIR):
         if not os.path.isdir(pose_path):
             continue
 
-        output_pose_dir = os.path.join(OUTPUT_DIR, ftype, pose) 
-        os.makedirs(output_pose_dir, exist_ok=True)
-
         for fname in os.listdir(pose_path):
+            if not fname.lower().endswith((".jpg", ".jpeg", ".png")): continue
 
-            if fname.lower().endswith((".jpg", ".jpeg", ".png")):
-                src = os.path.join(pose_path, fname)
-                dst = os.path.join(output_pose_dir, fname)
-                normalize_image(src, dst)
-                file_list.append(dst)
+            src = os.path.join(pose_path, fname)
 
-print("Готово. Количество изображений:", len(file_list))
+            img = cv.imread(src)
+            rgb = cv.cvtColor(img, cv.COLOR_BGR2RGB)
 
+            # создаём входной объект
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+
+            # детекция
+            result = detector.detect(mp_image)
+
+            keypoints = []
+
+            if not result.pose_landmarks:
+                print("Поза не найдена:", src)
+                continue
+
+            for landmarks in result.pose_landmarks[0]:
+                keypoints.append([landmarks.x, landmarks.y, landmarks.z])
+            
+            annotations.append({
+                "image": f"{ftype}/{pose}/{fname}", 
+                "keypoints": keypoints
+            })
+
+with open(r"data_annotation/preannotations.json", "w") as f: 
+    json.dump(annotations, f, indent=2) 
+    
+print("Готово. Предразметка выполнена.")
