@@ -56,7 +56,7 @@ for ftype in os.listdir(INPUT_DIR):
                 keypoints.append([landmarks.x, landmarks.y, landmarks.z])
             
             annotations.append({
-                "image": f"{ftype}/{pose}/{fname}", 
+                "image": f"{INPUT_DIR}/{ftype}/{pose}/{fname}", 
                 "keypoints": keypoints
             })
 
