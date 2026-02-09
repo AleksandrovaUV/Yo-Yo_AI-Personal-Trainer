@@ -51,7 +51,8 @@ def load_annotations(path, img_path, width, height):
     
     return None
 
-def save_annotaions(res_path, points, width, height, img_path):
+
+def save_annotations(res_path, points, width, height, img_path):
 
     if os.path.exists(res_path): 
         with open(res_path, "r", encoding="utf-8") as f: 
@@ -148,6 +149,12 @@ class Poser():
         cv2.putText(canvas, "Quit", (quit_box[0] + 40, new_y + 40), cv2.FONT_HERSHEY_DUPLEX, 1, BUTTON_TEXT_COLOR, 2)
 
         return canvas
+    
+    def click_button(self, x, y):
+        for name, (x1, y1, x2, y2) in self.buttons.items():
+            if x1 <= x <= x2 and y1 <= y <= y2:
+                return name
+        return None
 
     def mouse_callback(self, x, y, event, flag, param):
 
@@ -172,21 +179,32 @@ class Poser():
 
             canvas = self.img.copy()
 
-            cv2.imshow(window)
+            canvas = self.draw_buttons(canvas)
+
+            cv2.imshow(window, canvas)
             key = cv2.waitKey(20) & 0xFF
 
-            if key == ord('s'): 
+            for i, (x, y, z) in enumerate(self.points):
+                if x is not None:
+                    color = POINT_COLOR_ACTIVE if i == self.act else POINT_COLOR
+                    cv2.circle(canvas, (int(x), int(y)), POINT_RADIUS, color, POINT_THICKNESS)
+
+            if state["clicked"] == "save":
+                save_annotations(OUTPUT_JSON, self.img_path, self.points, self.w, self.h)
+                print("Сохранено:", self.img_path)
+                state["clicked"] = None
+
+            elif state["clicked"] == "next":
+                save_annotations(OUTPUT_JSON, self.img_path, self.points, self.w, self.h)
+                print("Сохранено:", self.img_path)
                 cv2.destroyWindow(window)
-                print('Changes saved')
-                return self.points
+                return "next"
             
-            #if key == ord('n'):
-
-
-            if key == ord('q'): 
+            
+            elif state["clicked"] == "quit":
                 cv2.destroyWindow(window)
-                print('Changes not saved')
-                return
+                return "quit"
+
 
 def main():
 
@@ -200,6 +218,9 @@ def main():
         if not INPUT_FILE: 
             print("Файл не выбран") 
             return
+        
+        poser = Poser(INPUT_FILE)
+        poser.run()
 
     elif ans == 'e':
         '''
