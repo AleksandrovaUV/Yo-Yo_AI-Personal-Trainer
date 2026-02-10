@@ -1,0 +1,14 @@
+[
+  {
+    "model": "MediaPipe",
+    "avg_time": NaN,
+    "fps": NaN,
+    "per_image": []
+  },
+  {
+    "model": "MoveNet",
+    "avg_time": NaN,
+    "fps": NaN,
+    "per_image": []
+  }
+]

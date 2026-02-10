@@ -24,6 +24,25 @@ BUTTON_TEXT_COLOR = (255, 255, 255)
 
 PREANNOTATIONS_JSON = 'data_annotation\preannotations.json'
 
+KEYPOINT_NAMES = [ # 33 POINTS  
+    "nose",
+    "left_eye_inner", "left_eye", "left_eye_outer",
+    "right_eye_inner", "right_eye", "right_eye_outer",
+    "left_ear", "right_ear",
+    "mouth_left", "mouth_right",
+    "left_shoulder", "right_shoulder",
+    "left_elbow", "right_elbow",
+    "left_wrist", "right_wrist",
+    "left_pinky", "right_pinky",
+    "left_index", "right_index",
+    "left_thumb", "right_thumb",
+    "left_hip", "right_hip",
+    "left_knee", "right_knee",
+    "left_ankle", "right_ankle",
+    "left_heel", "right_heel",
+    "left_foot_index", "right_foot_index"
+]
+
 '''
 UTILITIES:
 
@@ -97,6 +116,13 @@ Poser class allows for:
 
 class Poser():
 
+    '''
+    draw_buttons: drawing 'save', 'next', 'quit' buttons with basic shapes
+    click_button: checking if the mouse position is on the button and if yes -- on which one
+    mouse_callback:
+    run:
+    '''
+
     def __init__(self, img_path ):
 
         '''
@@ -156,17 +182,24 @@ class Poser():
                 return name
         return None
 
-    def mouse_callback(self, x, y, event, flag, param):
+    def mouse_callback(self, event, x, y, flags, state):
 
-        if event == cv2.EVENT_LBUTTONDBLCLK:
+        if event == cv2.EVENT_LBUTTONDOWN and y > self.h - BUTTON_HEIGHT: # => a button was pressed
+            button = self.click_button(x,y)
+            if button is not None:
+                state["clicked"] = button
+            return
 
+            
+        elif event == cv2.EVENT_LBUTTONDOWN: # => an image was pressed (keypoint is to be initiated)
             for n, (px, py, pz) in enumerate(self.points):
                 if px is None:
                     self.points[n] = [x, y, 0]
                     self.act = n
                     self.dragging = True
                     break
-            
+
+
     def run(self):
 
         window = 'Yo-Yo Annotator'
@@ -181,22 +214,27 @@ class Poser():
 
             canvas = self.draw_buttons(canvas)
 
-            cv2.imshow(window, canvas)
-            key = cv2.waitKey(20) & 0xFF
+            
+            #cv2.putText(canvas, f"Active: {KEYPOINT_NAMES[self.act]}", (10, 30), cv.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+
 
             for i, (x, y, z) in enumerate(self.points):
                 if x is not None:
                     color = POINT_COLOR_ACTIVE if i == self.act else POINT_COLOR
                     cv2.circle(canvas, (int(x), int(y)), POINT_RADIUS, color, POINT_THICKNESS)
+                    cv2.putText(canvas, KEYPOINT_NAMES[i], (int(x)+10, int(y)+10), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 1)
+
+            cv2.imshow(window, canvas)
+            cv2.waitKey(20)
 
             if state["clicked"] == "save":
                 save_annotations(OUTPUT_JSON, self.img_path, self.points, self.w, self.h)
-                print("Сохранено:", self.img_path)
+                print("Saved:", self.img_path)
                 state["clicked"] = None
 
             elif state["clicked"] == "next":
                 save_annotations(OUTPUT_JSON, self.img_path, self.points, self.w, self.h)
-                print("Сохранено:", self.img_path)
+                print("Saved:", self.img_path)
                 cv2.destroyWindow(window)
                 return "next"
             
@@ -208,7 +246,7 @@ class Poser():
 
 def main():
 
-    print('Free <f> annotation or error-based <e>?')
+    print('Free annotation <f> or error-based <e>?')
     ans = input().lower()
 
     if ans == 'f':
@@ -227,10 +265,6 @@ def main():
         Goes through a list of images with the 'anomaly' flag
         '''
         print('this part of the program is still a wip')
-
-    # if points is None:
-    #     print('Разметка отменена')
-    #     return
 
 
 if __name__ == "__main__":
