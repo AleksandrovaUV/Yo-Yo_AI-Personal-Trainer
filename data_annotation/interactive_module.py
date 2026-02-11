@@ -71,7 +71,7 @@ def load_annotations(path, img_path, width, height):
     return None
 
 
-def save_annotations(res_path, points, width, height, img_path):
+def save_annotations(res_path, points, width, height, img_path, keypoint_name):
 
     if os.path.exists(res_path): 
         with open(res_path, "r", encoding="utf-8") as f: 
@@ -80,14 +80,23 @@ def save_annotations(res_path, points, width, height, img_path):
     else: data = []
 
     normed = []
-    for x,y,z in points:
-        normed.append([x/width, y/height, z])
 
-    data.append({"image": img_path,
-    "keypoints": normed})
+    if len(points) < 3:
+        print('None points added.')
+        return
     
-    with open(res_path, "w") as f: 
-        json.dump(data, f, indent=2) 
+    else:
+        print(points)
+        for x, y, z in points: 
+            if x is None or y is None: normed.append(None) 
+            else: normed.append([x/width, y/height, z])
+
+        data.append({"image": img_path,
+        "keypoint name": keypoint_name,
+        "keypoints": normed})
+        
+        with open(res_path, "w") as f: 
+            json.dump(data, f, indent=2) 
 
 
 def choose_image_file(folder):
@@ -123,7 +132,7 @@ class Poser():
     run:
     '''
 
-    def __init__(self, img_path ):
+    def __init__(self, img_path, flag = True):
 
         '''
         :param img_path: path to an image
@@ -147,7 +156,7 @@ class Poser():
         self.buttons = {}
 
         preannot = load_annotations(PREANNOTATIONS_JSON, img_path, self.w, self.h)
-        if preannot is not None:
+        if preannot is not None and flag is not False:
             self.points = preannot
     
     def draw_buttons(self, canvas):
@@ -191,14 +200,34 @@ class Poser():
             return
 
             
-        elif event == cv2.EVENT_LBUTTONDOWN: # => an image was pressed (keypoint is to be initiated)
-            for n, (px, py, pz) in enumerate(self.points):
-                if px is None:
-                    self.points[n] = [x, y, 0]
-                    self.act = n
-                    self.dragging = True
-                    break
+        if event == cv2.EVENT_LBUTTONDOWN: # => an image was pressed (keypoint is to be initiated)
 
+            dists = []
+            for px, py, pz in self.points:
+                if px is None:
+                    dists.append(1e9)
+                else:
+                    dists.append(np.linalg.norm(np.array([x, y]) - np.array([px, py])))
+
+            idx = int(np.argmin(dists))
+            if dists[idx] < 20:
+                self.act = idx
+                self.dragging = True
+                
+            else:
+                for n, (px, py, pz) in enumerate(self.points):
+                    if px is None:
+                        self.points[n] = [x, y, 0]
+                        self.act = n
+                        self.dragging = True
+                        break
+
+        elif event == cv2.EVENT_MOUSEMOVE and self.dragging and self.act is not None:
+            self.points[self.act][0] = x
+            self.points[self.act][1] = y
+
+        elif event == cv2.EVENT_LBUTTONUP:
+            self.dragging = False
 
     def run(self):
 
@@ -215,7 +244,9 @@ class Poser():
             canvas = self.draw_buttons(canvas)
 
             
-            #cv2.putText(canvas, f"Active: {KEYPOINT_NAMES[self.act]}", (10, 30), cv.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+            if self.act is not None:
+                cv2.putText(canvas, f"Active: {KEYPOINT_NAMES[self.act]}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+
 
 
             for i, (x, y, z) in enumerate(self.points):
@@ -228,12 +259,12 @@ class Poser():
             cv2.waitKey(20)
 
             if state["clicked"] == "save":
-                save_annotations(OUTPUT_JSON, self.img_path, self.points, self.w, self.h)
+                save_annotations(OUTPUT_JSON,  self.points, self.w, self.h, self.img_path, KEYPOINT_NAMES[self.act])
                 print("Saved:", self.img_path)
                 state["clicked"] = None
 
             elif state["clicked"] == "next":
-                save_annotations(OUTPUT_JSON, self.img_path, self.points, self.w, self.h)
+                save_annotations(OUTPUT_JSON, self.points, self.w, self.h, self.img_path, KEYPOINT_NAMES[self.act])
                 print("Saved:", self.img_path)
                 cv2.destroyWindow(window)
                 return "next"
@@ -249,16 +280,42 @@ def main():
     print('Free annotation <f> or error-based <e>?')
     ans = input().lower()
 
+    print('Load pre-made annotations (if exist)? <y/n>')
+    inp = input().lower()
+    if inp == 'y': flag = True
+    else: flag = False
+
+
     if ans == 'f':
         INPUT_FILE = choose_image_file(INPUT_DIR)
-        print(INPUT_FILE)
+        print(f"Chosen file: {INPUT_FILE}")
 
         if not INPUT_FILE: 
-            print("Файл не выбран") 
+            print("No file chosen.") 
             return
         
-        poser = Poser(INPUT_FILE)
-        poser.run()
+        all_dir_files = sorted([os.path.join(INPUT_DIR, f) for f in os.listdir(INPUT_DIR) if f.lower().endswith((".jpg", ".jpeg", ".png"))])
+        start_path = os.path.relpath(INPUT_FILE)
+        all_paths = [os.path.relpath for f in all_dir_files]
+        index = all_paths.index(start_path)
+
+        while index < len(all_paths):
+
+            poser = Poser(all_paths[index], flag)
+            button_click = poser.run()
+
+            if button_click == "next":
+                index += 1
+                continue
+
+            if button_click == "quit":
+                print("Exiting the annotator.")
+                break
+
+            else:
+                break
+        
+        print("App closed")
 
     elif ans == 'e':
         '''
