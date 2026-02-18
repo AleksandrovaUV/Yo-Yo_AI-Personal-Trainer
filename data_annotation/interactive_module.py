@@ -158,6 +158,15 @@ class Poser():
         preannot = load_annotations(PREANNOTATIONS_JSON, img_path, self.w, self.h)
         if preannot is not None and flag is not False:
             self.points = preannot
+
+        self.zoom = 1.0
+        self.min_zoom = 0.5
+        self.max_zoom = 3.0
+
+        self.offsetx = 0 # a parametr that projects mouth clicks onto the xoomed canvas
+        self.offsety = 0
+
+
     
     def draw_buttons(self, canvas):
 
@@ -199,6 +208,11 @@ class Poser():
                 state["clicked"] = button
             return
 
+        if event == cv2.EVENT_MOUSEHWHEEL:
+            if flags > 0: # zooming in
+                self.zoom = min(self.zoom + 0.1, self.max_zoom)
+            else: self.zoom = max(self.min_zoom, self.zoom - 0.1)
+            return
             
         if event == cv2.EVENT_LBUTTONDOWN: # => an image was pressed (keypoint is to be initiated)
 
@@ -259,13 +273,17 @@ class Poser():
             cv2.waitKey(20)
 
             if state["clicked"] == "save":
-                save_annotations(OUTPUT_JSON,  self.points, self.w, self.h, self.img_path, KEYPOINT_NAMES[self.act])
-                print("Saved:", self.img_path)
+                if self.points is not None:
+                    save_annotations(OUTPUT_JSON,  self.points, self.w, self.h, self.img_path, KEYPOINT_NAMES[self.act])
+                    print("Saved:", self.img_path)
+                else: ValueError("No keypoints found.")
                 state["clicked"] = None
 
             elif state["clicked"] == "next":
-                save_annotations(OUTPUT_JSON, self.points, self.w, self.h, self.img_path, KEYPOINT_NAMES[self.act])
-                print("Saved:", self.img_path)
+                if self.points is not None:
+                    save_annotations(OUTPUT_JSON,  self.points, self.w, self.h, self.img_path, KEYPOINT_NAMES[self.act])
+                    print("Saved:", self.img_path)
+                else: ValueError("No keypoints found.")
                 cv2.destroyWindow(window)
                 return "next"
             
@@ -294,9 +312,17 @@ def main():
             print("No file chosen.") 
             return
         
-        all_dir_files = sorted([os.path.join(INPUT_DIR, f) for f in os.listdir(INPUT_DIR) if f.lower().endswith((".jpg", ".jpeg", ".png"))])
+        all_dir_files = []
+
+        for root, dirs, files in os.walk(INPUT_DIR):
+            for f in files:
+                if f.lower().endswith((".jpg", ".jpeg", ".png")):
+                    all_dir_files.append(os.path.join(root, f))
+
+        all_dir_files = sorted(all_dir_files)
+
         start_path = os.path.relpath(INPUT_FILE)
-        all_paths = [os.path.relpath for f in all_dir_files]
+        all_paths = [os.path.relpath(f) for f in all_dir_files]
         index = all_paths.index(start_path)
 
         while index < len(all_paths):
