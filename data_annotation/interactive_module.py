@@ -166,7 +166,8 @@ class Poser():
         self.offsetx = 0 # a parametr that projects mouth clicks onto the xoomed canvas
         self.offsety = 0
 
-
+        self.panning = False # image dragging
+        self.panning_start = (0,0)
     
     def draw_buttons(self, canvas):
 
@@ -207,14 +208,31 @@ class Poser():
             if button is not None:
                 state["clicked"] = button
             return
+        
 
-        if event == cv2.EVENT_MOUSEHWHEEL:
+        elif event == cv2.EVENT_MOUSEHWHEEL: # => zoom initiated
             if flags > 0: # zooming in
                 self.zoom = min(self.zoom + 0.1, self.max_zoom)
             else: self.zoom = max(self.min_zoom, self.zoom - 0.1)
             return
+        
+        elif event == cv2.EVENT_RBUTTONDOWN: # => image dragging initiated
+            self.panning = True
+            self.panning_start = (x,y)
+
+        elif event == cv2.EVENT_MOUSEMOVE and self.panning is True: # => processing with dragging
+            dx = x - self.panning_start[0] 
+            dy = y - self.panning_start[1] 
+            self.offsetx += dx 
+            self.offsety += dy 
+            self.panning_start = (x, y)
+
+        elif event == cv2.EVENT_RBUTTONUP: self.panning = False # stop panning
             
-        if event == cv2.EVENT_LBUTTONDOWN: # => an image was pressed (keypoint is to be initiated)
+        elif event == cv2.EVENT_LBUTTONDOWN: # => an image was pressed (keypoint is to be initiated)
+
+            orig_x = int((x - self.offsetx) / self.zoom) 
+            orig_y = int((y - self.offsety) / self.zoom)
 
             dists = []
             for px, py, pz in self.points:
@@ -231,7 +249,7 @@ class Poser():
             else:
                 for n, (px, py, pz) in enumerate(self.points):
                     if px is None:
-                        self.points[n] = [x, y, 0]
+                        self.points[n] = [orig_x, orig_y, 0]
                         self.act = n
                         self.dragging = True
                         break
@@ -253,7 +271,19 @@ class Poser():
 
         while True:
 
-            canvas = self.img.copy()
+            zoomed = cv2.resize(self.img, None, fx = self.zoom, fy = self.zoom)
+            canvas = np.zeros_like(self.img)
+
+            h, w =  self.h, self.w
+            fh, fw = zoomed.shape[:2]
+
+            x1 = max(0, -self.offsetx) 
+            y1 = max(0, -self.offsety)
+            x2 = min(fw, w - self.offsetx)
+            y2 = min(fh, h - self.offsety)
+            canvas_y1 = max(0, self.offsety)
+            canvas_x1 = max(0, self.offsetx)
+            canvas[canvas_y1:canvas_y1 + (y2 - y1), canvas_x1:canvas_x1 + (x2 - x1)] = zoomed[y1:y2, x1:x2]
 
             canvas = self.draw_buttons(canvas)
 
@@ -263,11 +293,14 @@ class Poser():
 
 
 
+
             for i, (x, y, z) in enumerate(self.points):
                 if x is not None:
+                    fx = int(x * self.zoom + self.offsetx)
+                    fy = int(y * self.zoom + self.offsety)
                     color = POINT_COLOR_ACTIVE if i == self.act else POINT_COLOR
-                    cv2.circle(canvas, (int(x), int(y)), POINT_RADIUS, color, POINT_THICKNESS)
-                    cv2.putText(canvas, KEYPOINT_NAMES[i], (int(x)+10, int(y)+10), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 1)
+                    cv2.circle(canvas, (int(fx), int(fy)), POINT_RADIUS, color, POINT_THICKNESS)
+                    cv2.putText(canvas, KEYPOINT_NAMES[i], (int(fx)+10, int(fy)+10), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 1)
 
             cv2.imshow(window, canvas)
             cv2.waitKey(20)
