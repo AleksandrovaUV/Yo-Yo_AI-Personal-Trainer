@@ -22,18 +22,15 @@ BUTTON_HEIGHT = 60
 BUTTON_COLOR = (60, 60, 60)
 BUTTON_TEXT_COLOR = (255, 255, 255)
 
-PREANNOTATIONS_JSON = 'data_annotation\preannotations.json'
+PREANNOTATIONS_JSON = 'data_annotation\manual_annotation.json'
 
-KEYPOINT_NAMES = [ # 33 POINTS  
+KEYPOINT_NAMES = [
     "nose",
-    "left_eye_inner", "left_eye", "left_eye_outer",
-    "right_eye_inner", "right_eye", "right_eye_outer",
-    "left_ear", "right_ear",
-    "mouth_left", "mouth_right",
+    "left_eye",
+    "right_eye",
     "left_shoulder", "right_shoulder",
     "left_elbow", "right_elbow",
     "left_wrist", "right_wrist",
-    "left_pinky", "right_pinky",
     "left_index", "right_index",
     "left_thumb", "right_thumb",
     "left_hip", "right_hip",
@@ -53,25 +50,41 @@ save_annotaions: saving new annotations to a file
 '''
 
 def load_annotations(path, img_path, width, height):
-    if path is None or not os.path.exists(path): return {}
-    with open(path, "r", encoding="utf-8") as f: 
+    if path is None or not os.path.exists(path):
+        return None
+
+    with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-        filename = os.path.basename(img_path)
+    filename = os.path.basename(img_path)
 
-        for item in data:
-            if item["image"].endswith(filename):
-                points = []
-                for (x,y,z) in item["keypoints"]:
-                    px = x * width
-                    py = y * height
-                    points.append([px, py, z])
-                return points
-    
+    for item in data:
+        if item["image"].endswith(filename):
+            points = []
+            for kp in item["keypoints"]:
+
+                if kp is None:
+                    points.append([None, None])
+                    continue
+
+                if len(kp) == 3: x, y, _ = kp
+
+                elif len(kp) == 2: x, y = kp
+
+                else:
+                    points.append([None, None])
+                    continue
+
+                px = x * width if x is not None else None
+                py = y * height if y is not None else None
+
+                points.append([px, py])
+            return points
     return None
 
 
-def save_annotations(res_path, points, width, height, img_path, keypoint_name):
+
+def save_annotations(res_path, points, width, height, img_path):
 
     if os.path.exists(res_path): 
         with open(res_path, "r", encoding="utf-8") as f: 
@@ -81,18 +94,17 @@ def save_annotations(res_path, points, width, height, img_path, keypoint_name):
 
     normed = []
 
-    if len(points) < 3:
+    if len(points) < 2:
         print('None points added.')
         return
     
     else:
         print(points)
-        for x, y, z in points: 
+        for x, y in points: 
             if x is None or y is None: normed.append(None) 
-            else: normed.append([x/width, y/height, z])
+            else: normed.append([x/width, y/height])
 
         data.append({"image": img_path,
-        "keypoint name": keypoint_name,
         "keypoints": normed})
         
         with open(res_path, "w") as f: 
@@ -150,7 +162,7 @@ class Poser():
         self.h, self.w = self.img.shape[:2]
 
         self.dragging = False
-        self.points = [[None, None, 0] for _ in range(33)]
+        self.points = [[None, None] for _ in range(23)]
         self.act = None
 
         self.buttons = {}
@@ -160,8 +172,8 @@ class Poser():
             self.points = preannot
 
         self.zoom = 1.0
-        self.min_zoom = 0.5
-        self.max_zoom = 3.0
+        self.min_zoom = 1.0
+        self.max_zoom = 4.0
 
         self.offsetx = 0 # a parametr that projects mouth clicks onto the xoomed canvas
         self.offsety = 0
@@ -228,6 +240,23 @@ class Poser():
             self.panning_start = (x, y)
 
         elif event == cv2.EVENT_RBUTTONUP: self.panning = False # stop panning
+
+        elif event == cv2.EVENT_RBUTTONDBLCLK:
+
+            orig_x = int((x - self.offsetx) / self.zoom)
+            orig_y = int((y - self.offsety) / self.zoom)
+
+
+            for i, (px, py) in enumerate(self.points):
+                if px is None:
+                    continue
+
+                if abs(orig_x - px) < 10 and abs(orig_y - py) < 10:
+                    self.points[i] = [None, None]
+                    if self.act == i:
+                        self.act = None
+                    return 
+
             
         elif event == cv2.EVENT_LBUTTONDOWN: # => an image was pressed (keypoint is to be initiated)
 
@@ -235,11 +264,11 @@ class Poser():
             orig_y = int((y - self.offsety) / self.zoom)
 
             dists = []
-            for px, py, pz in self.points:
+            for px, py in self.points:
                 if px is None:
                     dists.append(1e9)
                 else:
-                    dists.append(np.linalg.norm(np.array([x, y]) - np.array([px, py])))
+                    dists.append(np.linalg.norm(np.array([orig_x, orig_y]) - np.array([px, py])))
 
             idx = int(np.argmin(dists))
             if dists[idx] < 20:
@@ -247,9 +276,9 @@ class Poser():
                 self.dragging = True
                 
             else:
-                for n, (px, py, pz) in enumerate(self.points):
+                for n, (px, py) in enumerate(self.points):
                     if px is None:
-                        self.points[n] = [orig_x, orig_y, 0]
+                        self.points[n] = [orig_x, orig_y]
                         self.act = n
                         self.dragging = True
                         break
@@ -283,7 +312,9 @@ class Poser():
             y2 = min(fh, h - self.offsety)
             canvas_y1 = max(0, self.offsety)
             canvas_x1 = max(0, self.offsetx)
-            canvas[canvas_y1:canvas_y1 + (y2 - y1), canvas_x1:canvas_x1 + (x2 - x1)] = zoomed[y1:y2, x1:x2]
+            crop_w = x2 - x1 
+            crop_h = y2 - y1
+            if crop_w > 0 and crop_h > 0: canvas[canvas_y1:canvas_y1 + crop_h, canvas_x1:canvas_x1 + crop_w] = zoomed[y1:y2, x1:x2]
 
             canvas = self.draw_buttons(canvas)
 
@@ -292,9 +323,7 @@ class Poser():
                 cv2.putText(canvas, f"Active: {KEYPOINT_NAMES[self.act]}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
 
 
-
-
-            for i, (x, y, z) in enumerate(self.points):
+            for i, (x, y) in enumerate(self.points):
                 if x is not None:
                     fx = int(x * self.zoom + self.offsetx)
                     fy = int(y * self.zoom + self.offsety)
@@ -307,16 +336,12 @@ class Poser():
 
             if state["clicked"] == "save":
                 if self.points is not None:
-                    save_annotations(OUTPUT_JSON,  self.points, self.w, self.h, self.img_path, KEYPOINT_NAMES[self.act])
+                    save_annotations(OUTPUT_JSON,  self.points, self.w, self.h, self.img_path)
                     print("Saved:", self.img_path)
                 else: ValueError("No keypoints found.")
                 state["clicked"] = None
 
             elif state["clicked"] == "next":
-                if self.points is not None:
-                    save_annotations(OUTPUT_JSON,  self.points, self.w, self.h, self.img_path, KEYPOINT_NAMES[self.act])
-                    print("Saved:", self.img_path)
-                else: ValueError("No keypoints found.")
                 cv2.destroyWindow(window)
                 return "next"
             
@@ -382,6 +407,7 @@ def main():
         '''
         print('this part of the program is still a wip')
 
+    else: ValueError('This is not a valid answer.')
 
 if __name__ == "__main__":
     main()
