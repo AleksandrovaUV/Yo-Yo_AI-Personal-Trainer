@@ -9,7 +9,8 @@ from mediapipe.tasks.python import vision
 
 from iterative_module import check_pose
 
-
+import time
+start = time.time()
 
 model_path = r"model_0.0\pose_landmarker_full.task"
 
@@ -57,8 +58,10 @@ def list_images(path): # detecting an image folder or a directory
 
 all_images = list_images(INPUT_DIR)
 
+error_counter = 0
 
 for src in all_images:
+
 
     img = cv.imread(src)
     rgb = cv.cvtColor(img, cv.COLOR_BGR2RGB)
@@ -87,6 +90,9 @@ for src in all_images:
 
     if correction["status"] != "OK":
         print(f"[{correction['status']}] {src}")
+        error_counter += 1
+
+print(f"You should pay attention to {error_counter} images out of {len(all_images)}")
 
 with open(r"data_annotation/preannotations.json", "w") as f: 
     json.dump(annotations, f, indent=2) 
@@ -96,5 +102,7 @@ try:
 except:
     pass
 
+end = time.time()
 
+print(f"Time: {end - start} seconds")
 print("Done.")
