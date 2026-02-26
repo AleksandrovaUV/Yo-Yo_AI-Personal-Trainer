@@ -22,7 +22,7 @@ BUTTON_HEIGHT = 60
 BUTTON_COLOR = (60, 60, 60)
 BUTTON_TEXT_COLOR = (255, 255, 255)
 
-PREANNOTATIONS_JSON = 'data_annotation\manual_annotation.json'
+PREANNOTATIONS_JSON = 'data_annotation\preannotations.json'
 
 KEYPOINT_NAMES = [
     "nose",
@@ -40,14 +40,93 @@ KEYPOINT_NAMES = [
     "left_foot_index", "right_foot_index"
 ]
 
+MP_MAPPING = {
+    "nose": 0,
+    "left_eye": 2,
+    "right_eye": 5,
+    "left_shoulder": 11,
+    "right_shoulder": 12,
+    "left_elbow": 13,
+    "right_elbow": 14,
+    "left_wrist": 15,
+    "right_wrist": 16,
+    "left_index": 19,
+    "right_index": 20,
+    "left_thumb": 17,
+    "right_thumb": 18,
+    "left_hip": 23,
+    "right_hip": 24,
+    "left_knee": 25,
+    "right_knee": 26,
+    "left_ankle": 27,
+    "right_ankle": 28,
+    "left_heel": 29,
+    "right_heel": 30,
+    "left_foot_index": 31,
+    "right_foot_index": 32
+}
+
+'''
+a whole list of MediaPipe keypoints (IN A FOLLOWING ORDER):
+
+KEYPOINT_NAMES = [
+    "nose",
+    "left_eye_inner",
+    "left_eye",
+    "left_eye_outer",
+    "right_eye_inner",
+    "right_eye",
+    "right_eye_outer",
+    "left_ear",
+    "right_ear",
+    "mouth_left",
+    "mouth_right",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_pinky",
+    "right_pinky",
+    "left_index",
+    "right_index",
+    "left_thumb",
+    "right_thumb",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle",
+    "left_heel",
+    "right_heel",
+    "left_foot_index",
+    "right_foot_index"
+]
+
+'''
+
 '''
 UTILITIES:
 
 load_annotations: loads existing annotations (if they exist) from a json file
 choose_image_file: opens a file manager with an ability to select a desired image easily
 save_annotaions: saving new annotations to a file
+map_to_my_format: alligns chosen keypoints with preannotated ones
 
 '''
+
+def map_to_my_format(pred, mapping):
+    result = np.full((len(KEYPOINT_NAMES), 2), np.nan)
+    for i, name in enumerate(KEYPOINT_NAMES):
+        if name in mapping:
+            idx = mapping[name]
+            if idx < len(pred):
+                result[i] = pred[idx][:2]
+    return result
+
+
 
 def load_annotations(path, img_path, width, height):
     if path is None or not os.path.exists(path):
@@ -61,6 +140,8 @@ def load_annotations(path, img_path, width, height):
     for item in data:
         if item["image"].endswith(filename):
             points = []
+
+
             for kp in item["keypoints"]:
 
                 if kp is None:
@@ -75,13 +156,16 @@ def load_annotations(path, img_path, width, height):
                     points.append([None, None])
                     continue
 
-                px = x * width if x is not None else None
-                py = y * height if y is not None else None
+                points.append([x, y])
+            
+            mapped = map_to_my_format(points, MP_MAPPING)
 
-                points.append([px, py])
-            return points
+            mapped[:, 0] = mapped[:,0] * width
+            mapped[:, 1] = mapped[:,1] * height
+
+            return mapped
+        
     return None
-
 
 
 def save_annotations(res_path, points, width, height, img_path):
@@ -104,11 +188,24 @@ def save_annotations(res_path, points, width, height, img_path):
             if x is None or y is None: normed.append(None) 
             else: normed.append([x/width, y/height])
 
-        data.append({"image": img_path,
-        "keypoints": normed})
-        
-        with open(res_path, "w") as f: 
-            json.dump(data, f, indent=2) 
+
+    updated = False # searching for a file if it has already been created
+    for item in data:
+        if item["image"] == img_path:
+            item["keypoints"] = normed
+            updated = True
+            print(f"Updated existing annotation for {img_path}")
+            break
+
+    if not updated: # if not created, create a new file
+        data.append({
+            "image": img_path,
+            "keypoints": normed
+        })
+        print(f"Added new annotation for {img_path}")
+    
+    with open(res_path, "w", encoding="utf-8") as f: 
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 def choose_image_file(folder):
@@ -320,7 +417,9 @@ class Poser():
 
             
             if self.act is not None:
+                cv2.putText(canvas, f"Active: {KEYPOINT_NAMES[self.act]}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 5)
                 cv2.putText(canvas, f"Active: {KEYPOINT_NAMES[self.act]}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+                
 
 
             for i, (x, y) in enumerate(self.points):
@@ -330,6 +429,7 @@ class Poser():
                     color = POINT_COLOR_ACTIVE if i == self.act else POINT_COLOR
                     cv2.circle(canvas, (int(fx), int(fy)), POINT_RADIUS, color, POINT_THICKNESS)
                     cv2.putText(canvas, KEYPOINT_NAMES[i], (int(fx)+10, int(fy)+10), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 1)
+                    
 
             cv2.imshow(window, canvas)
             cv2.waitKey(20)

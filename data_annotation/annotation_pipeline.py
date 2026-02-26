@@ -7,10 +7,9 @@ import json
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
-# путь к модели .task
 model_path = r"model_0.0\pose_landmarker_full.task"
 
-INPUT_DIR = "prepared_data" 
+INPUT_DIR = r"prepared_data\valid\Tree" 
 KEYPOINT_NAMES = [
     "nose",
     "left_eye_inner", "left_eye", "left_eye_outer",
@@ -31,7 +30,6 @@ KEYPOINT_NAMES = [
 ]
 
 
-# детектор позы
 base_options = python.BaseOptions(model_asset_path=model_path)
 options = vision.PoseLandmarkerOptions(
     base_options=base_options,
@@ -41,45 +39,48 @@ detector = vision.PoseLandmarker.create_from_options(options)
 
 annotations = []
 
-for ftype in os.listdir(INPUT_DIR):
-    ftype_path = os.path.join(INPUT_DIR, ftype)
-    if not os.path.isdir(ftype_path):
+def list_images(path): # detecting an image folder or a directory 
+    items = os.listdir(path)
+    if any(os.path.isfile(os.path.join(path, x)) for x in items):
+        return [os.path.join(path, x) for x in items if x.lower().endswith((".jpg",".jpeg",".png"))]
+
+    result = []
+    for x in items:
+        sub = os.path.join(path, x)
+        if os.path.isdir(sub):
+            result.extend(list_images(sub))
+    return result
+
+all_images = list_images(INPUT_DIR)
+
+
+for src in all_images:
+
+    img = cv.imread(src)
+    rgb = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+
+    result = detector.detect(mp_image)
+
+    keypoints = []
+
+    if not result.pose_landmarks:
+        print("No pose in: ", src)
         continue
 
-    for pose in os.listdir(ftype_path):
-        pose_path = os.path.join(ftype_path, pose)
-        if not os.path.isdir(pose_path):
-            continue
-
-        for fname in os.listdir(pose_path):
-            if not fname.lower().endswith((".jpg", ".jpeg", ".png")): continue
-
-            src = os.path.join(pose_path, fname)
-
-            img = cv.imread(src)
-            rgb = cv.cvtColor(img, cv.COLOR_BGR2RGB)
-
-            # создаём входной объект
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-
-            # детекция
-            result = detector.detect(mp_image)
-
-            keypoints = []
-
-            if not result.pose_landmarks:
-                print("Поза не найдена:", src)
-                continue
-
-            for landmarks in result.pose_landmarks[0]:
-                keypoints.append([landmarks.x, landmarks.y, landmarks.z])
-            
-            annotations.append({
-                "image": f"{INPUT_DIR}/{ftype}/{pose}/{fname}", 
-                "keypoints": keypoints
-            })
+    for landmarks in result.pose_landmarks[0]:
+        keypoints.append([landmarks.x, landmarks.y, landmarks.z])
+    
+    annotations.append({
+        "image": src, 
+        "keypoints": keypoints
+    })
 
 with open(r"data_annotation/preannotations.json", "w") as f: 
     json.dump(annotations, f, indent=2) 
-    
-print("Готово. Предразметка выполнена.")
+
+detector.close()
+del detector
+
+print("Done.")
