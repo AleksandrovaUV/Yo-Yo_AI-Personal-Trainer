@@ -7,9 +7,13 @@ import json
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
+from iterative_module import check_pose
+
+
+
 model_path = r"model_0.0\pose_landmarker_full.task"
 
-INPUT_DIR = r"prepared_data\valid\Tree" 
+INPUT_DIR = r"prepared_data" 
 KEYPOINT_NAMES = [
     "nose",
     "left_eye_inner", "left_eye", "left_eye_outer",
@@ -70,17 +74,27 @@ for src in all_images:
         continue
 
     for landmarks in result.pose_landmarks[0]:
-        keypoints.append([landmarks.x, landmarks.y, landmarks.z])
+        keypoints.append([landmarks.x, landmarks.y])
+
+    correction = check_pose(keypoints)
     
     annotations.append({
         "image": src, 
-        "keypoints": keypoints
+        "keypoints": keypoints,
+        "status": correction["status"],
+        "issues": correction["issues"]
     })
+
+    if correction["status"] != "OK":
+        print(f"[{correction['status']}] {src}")
 
 with open(r"data_annotation/preannotations.json", "w") as f: 
     json.dump(annotations, f, indent=2) 
 
-detector.close()
-del detector
+try:
+    detector.close()
+except:
+    pass
+
 
 print("Done.")

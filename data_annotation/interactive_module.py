@@ -5,6 +5,7 @@ import numpy as np
 from tkinter import Tk, filedialog
 
 
+
 '''
 settings for the project
 '''
@@ -110,10 +111,13 @@ KEYPOINT_NAMES = [
 '''
 UTILITIES:
 
-load_annotations: loads existing annotations (if they exist) from a json file
+load_annotations: loads existing annotations (if they exist) from a json file per image
+load_preannotations: loading all annotations
 choose_image_file: opens a file manager with an ability to select a desired image easily
 save_annotaions: saving new annotations to a file
 map_to_my_format: alligns chosen keypoints with preannotated ones
+get_flagged_images: extracts images with found anomalies
+update_status_in_preannotations: updating annotation status
 
 '''
 
@@ -126,6 +130,34 @@ def map_to_my_format(pred, mapping):
                 result[i] = pred[idx][:2]
     return result
 
+def get_flagged_images(preannotations): 
+    flagged = [] 
+    for item in preannotations: 
+        status = item.get("status", "OK") 
+        if status in ("WARNING", "ERROR"): 
+            flagged.append(item["image"]) 
+    return flagged
+
+def update_status_in_preannotations(json_path, image_path):
+    if not os.path.exists(json_path):
+        return
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    for item in data:
+        if item["image"] == image_path:
+            item["status"] = "OK"
+            item["issues"] = []
+            break
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+def load_preannotations(path):
+    if not os.path.exists(path):
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def load_annotations(path, img_path, width, height):
@@ -499,15 +531,60 @@ def main():
             else:
                 break
         
-        print("App closed")
 
     elif ans == 'e':
         '''
         Goes through a list of images with the 'anomaly' flag
         '''
-        print('this part of the program is still a wip')
+        print('Loading flagged files from: ', PREANNOTATIONS_JSON)
+        flagged_imgs = get_flagged_images(load_preannotations(PREANNOTATIONS_JSON))
+        preann_by_image = {item["image"]: item for item in load_preannotations(PREANNOTATIONS_JSON)}
+
+        if not flagged_imgs: ValueError("No flagged files in ", PREANNOTATIONS_JSON)
+
+        i = 0
+        imgs_list = sorted(flagged_imgs)
+
+        while i < len(imgs_list):
+
+            img_path = imgs_list[i]
+
+            if img_path in preann_by_image:
+                status = preann_by_image[img_path].get("status", "OK")
+                issues = preann_by_image[img_path].get("issues", [])
+
+                print(f"\n {img_path} ")
+                print(f"Current status: {status}")
+
+                if issues:
+                    print("Errors to revise:")
+                    for issue in issues:
+                        print(f"  - {issue['rule']} ({issue['severity']})")
+                else:
+                    print("No errors.")
+
+            poser = Poser(img_path, flag = True)
+            button_click = poser.run()
+
+            if button_click == "next":
+                i += 1
+                continue
+            
+            if button_click == "quit":
+                print("Exiting the annotator.")
+                break
+
+            elif button_click == "save":
+                update_status_in_preannotations(PREANNOTATIONS_JSON, img_path)
+                continue
+
+            else:
+                break
+
 
     else: ValueError('This is not a valid answer.')
+
+    print("App closed")
 
 if __name__ == "__main__":
     main()
