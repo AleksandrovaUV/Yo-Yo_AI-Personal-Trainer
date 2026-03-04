@@ -199,6 +199,20 @@ def load_annotations(path, img_path, width, height):
         
     return None
 
+def delete_preannotation(json_path, img_path):
+    if not os.path.exists(json_path):
+        return
+
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+
+    new_data = [item for item in data if not item["image"] == img_path]
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(new_data, f, indent=2, ensure_ascii=False)
+
+    print(f"Deleted preannotation for {img_path}")
 
 def save_annotations(res_path, points, width, height, img_path):
 
@@ -267,7 +281,7 @@ Poser class allows for:
 class Poser():
 
     '''
-    draw_buttons: drawing 'save', 'next', 'quit' buttons with basic shapes
+    draw_buttons: drawing 'save', 'next', 'quit', 'delete' buttons with basic shapes
     click_button: checking if the mouse position is on the button and if yes -- on which one
     mouse_callback:
     run:
@@ -311,30 +325,41 @@ class Poser():
         self.panning_start = (0,0)
     
     def draw_buttons(self, canvas):
-
         new_y = self.h - BUTTON_HEIGHT
         new_y2 = self.h
 
-        # save button
-        save_box = (0, new_y, self.w // 3, new_y2)
+        segment = self.w // 4
+
+        # save
+        save_box = (0, new_y, segment, new_y2)
         self.buttons["save"] = save_box
         cv2.rectangle(canvas, (save_box[0], save_box[1]), (save_box[2], save_box[3]), BUTTON_COLOR, -1)
-        cv2.putText(canvas, "Save", (save_box[0] + 40, new_y + 40), cv2.FONT_HERSHEY_DUPLEX, 1, BUTTON_TEXT_COLOR, 2)
+        cv2.putText(canvas, "Save", (save_box[0] + 40, new_y + 40),
+                    cv2.FONT_HERSHEY_DUPLEX, 1, BUTTON_TEXT_COLOR, 2)
 
-        # next button
-        next_box = (self.w // 3, new_y, 2* self.w // 3, new_y2)
+        # next
+        next_box = (segment, new_y, 2 * segment, new_y2)
         self.buttons["next"] = next_box
         cv2.rectangle(canvas, (next_box[0], next_box[1]), (next_box[2], next_box[3]), BUTTON_COLOR, -1)
-        cv2.putText(canvas, "Next", (next_box[0] + 40, new_y + 40), cv2.FONT_HERSHEY_DUPLEX, 1, BUTTON_TEXT_COLOR, 2)
+        cv2.putText(canvas, "Next", (next_box[0] + 40, new_y + 40),
+                    cv2.FONT_HERSHEY_DUPLEX, 1, BUTTON_TEXT_COLOR, 2)
 
-
-        # quit button
-        quit_box = (2* self.w // 3, new_y, self.w, new_y2)
+        # quit
+        quit_box = (2 * segment, new_y, 3 * segment, new_y2)
         self.buttons["quit"] = quit_box
         cv2.rectangle(canvas, (quit_box[0], quit_box[1]), (quit_box[2], quit_box[3]), BUTTON_COLOR, -1)
-        cv2.putText(canvas, "Quit", (quit_box[0] + 40, new_y + 40), cv2.FONT_HERSHEY_DUPLEX, 1, BUTTON_TEXT_COLOR, 2)
+        cv2.putText(canvas, "Quit", (quit_box[0] + 40, new_y + 40),
+                    cv2.FONT_HERSHEY_DUPLEX, 1, BUTTON_TEXT_COLOR, 2)
+
+        # delete
+        del_box = (3 * segment, new_y, self.w, new_y2)
+        self.buttons["delete"] = del_box
+        cv2.rectangle(canvas, (del_box[0], del_box[1]), (del_box[2], del_box[3]), (120, 0, 0), -1)
+        cv2.putText(canvas, "Delete", (del_box[0] + 30, new_y + 40),
+                    cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
 
         return canvas
+
     
     def click_button(self, x, y):
         for name, (x1, y1, x2, y2) in self.buttons.items():
@@ -344,11 +369,12 @@ class Poser():
 
     def mouse_callback(self, event, x, y, flags, state):
 
-        if event == cv2.EVENT_LBUTTONDOWN and y > self.h - BUTTON_HEIGHT: # => a button was pressed
-            button = self.click_button(x,y)
+        if event == cv2.EVENT_LBUTTONDOWN and y > self.h - BUTTON_HEIGHT:
+            button = self.click_button(x, y)
             if button is not None:
                 state["clicked"] = button
-            return
+                return
+
         
 
         elif event == cv2.EVENT_MOUSEHWHEEL: # => zoom initiated
@@ -376,9 +402,11 @@ class Poser():
             orig_y = int((y - self.offsety) / self.zoom)
 
 
-            for i, (px, py) in enumerate(self.points):
-                if px is None:
+            for i, kp in enumerate(self.points):
+                if kp is None:
                     continue
+
+                px, py = kp
 
                 if abs(orig_x - px) < 10 and abs(orig_y - py) < 10:
                     self.points[i] = [None, None]
@@ -393,11 +421,12 @@ class Poser():
             orig_y = int((y - self.offsety) / self.zoom)
 
             dists = []
-            for px, py in self.points:
-                if px is None:
-                    dists.append(1e9)
-                else:
-                    dists.append(np.linalg.norm(np.array([orig_x, orig_y]) - np.array([px, py])))
+            for kp in self.points:
+                if kp is None:
+                    dists.append(1e9) 
+                    continue
+                px, py = kp
+                dists.append(np.linalg.norm(np.array([orig_x, orig_y]) - np.array([px, py])))
 
             idx = int(np.argmin(dists))
             if dists[idx] < 20:
@@ -405,16 +434,22 @@ class Poser():
                 self.dragging = True
                 
             else:
-                for n, (px, py) in enumerate(self.points):
-                    if px is None:
+                for n, kp in enumerate(self.points):
+                    if kp is None:
                         self.points[n] = [orig_x, orig_y]
                         self.act = n
                         self.dragging = True
                         break
+                    px, py = kp
 
         elif event == cv2.EVENT_MOUSEMOVE and self.dragging and self.act is not None:
-            self.points[self.act][0] = x
-            self.points[self.act][1] = y
+            if self.points[self.act] is None: return
+
+            orig_x = int((x - self.offsetx) / self.zoom)
+            orig_y = int((y - self.offsety) / self.zoom)
+
+            self.points[self.act][0] = orig_x
+            self.points[self.act][1] = orig_y
 
         elif event == cv2.EVENT_LBUTTONUP:
             self.dragging = False
@@ -454,13 +489,27 @@ class Poser():
                 
 
 
-            for i, (x, y) in enumerate(self.points):
-                if x is not None:
-                    fx = int(x * self.zoom + self.offsetx)
-                    fy = int(y * self.zoom + self.offsety)
-                    color = POINT_COLOR_ACTIVE if i == self.act else POINT_COLOR
-                    cv2.circle(canvas, (int(fx), int(fy)), POINT_RADIUS, color, POINT_THICKNESS)
-                    cv2.putText(canvas, KEYPOINT_NAMES[i], (int(fx)+10, int(fy)+10), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 1)
+            for i, kp in enumerate(self.points):
+
+                if kp is None:
+                    continue
+
+                px, py = kp
+
+                if px is None or py is None:
+                    continue
+                if isinstance(px, float) and np.isnan(px):
+                    continue
+                if isinstance(py, float) and np.isnan(py):
+                    continue
+
+                fx = int(px * self.zoom + self.offsetx)
+                fy = int(py * self.zoom + self.offsety)
+
+
+                color = POINT_COLOR_ACTIVE if i == self.act else POINT_COLOR
+                cv2.circle(canvas, (int(fx), int(fy)), POINT_RADIUS, color, POINT_THICKNESS)
+                cv2.putText(canvas, KEYPOINT_NAMES[i], (int(fx)+10, int(fy)+10), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 0), 1)
                     
 
             cv2.imshow(window, canvas)
@@ -474,6 +523,8 @@ class Poser():
                 state["clicked"] = None
 
             elif state["clicked"] == "next":
+                update_status_in_preannotations(PREANNOTATIONS_JSON, self.img_path) 
+                print(f"Marked {self.img_path} as OK in preannotations.")
                 cv2.destroyWindow(window)
                 return "next"
             
@@ -481,6 +532,14 @@ class Poser():
             elif state["clicked"] == "quit":
                 cv2.destroyWindow(window)
                 return "quit"
+            
+            elif state["clicked"] == "delete":
+                delete_preannotation(PREANNOTATIONS_JSON, self.img_path)
+                self.points = [[None, None] for _ in range(23)]
+                self.act = None
+                print("Preannotation removed.")
+                state["clicked"] = None
+
 
 
 def main():
@@ -554,6 +613,7 @@ def main():
                 issues = preann_by_image[img_path].get("issues", [])
 
                 print(f"\n {img_path} ")
+                print(f"image {i} out of {len(imgs_list)}")
                 print(f"Current status: {status}")
 
                 if issues:
@@ -575,7 +635,6 @@ def main():
                 break
 
             elif button_click == "save":
-                update_status_in_preannotations(PREANNOTATIONS_JSON, img_path)
                 continue
 
             else:

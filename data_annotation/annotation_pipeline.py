@@ -34,6 +34,7 @@ KEYPOINT_NAMES = [
     "left_foot_index", "right_foot_index"
 ]
 
+print(os.listdir(INPUT_DIR))
 
 base_options = python.BaseOptions(model_asset_path=model_path)
 options = vision.PoseLandmarkerOptions(

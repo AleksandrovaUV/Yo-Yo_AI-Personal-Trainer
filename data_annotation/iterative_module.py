@@ -1,5 +1,3 @@
-
-
 import numpy as np
 import math
 
@@ -42,7 +40,6 @@ def rule_validity(kps):
 
 
 def rule_anatomy(kps):
-    """anatomic rules."""
     issues = []
 
     # MediaPipe
@@ -110,9 +107,124 @@ def rule_angles(kps):
 
     return issues
 
+def rule_proportions(kps):
+    """Check limb length ratios (perspective-robust)."""
+    issues = []
+
+    L_SH, R_SH = 11, 12
+    L_EL, R_EL = 13, 14
+    L_WR, R_WR = 15, 16
+    L_HIP, R_HIP = 23, 24
+    L_KNEE, R_KNEE = 25, 26
+    L_ANK, R_ANK = 27, 28
+
+    # lengths
+    L_upper_arm = dist(kps[L_SH], kps[L_EL])
+    L_lower_arm = dist(kps[L_EL], kps[L_WR])
+    R_upper_arm = dist(kps[R_SH], kps[R_EL])
+    R_lower_arm = dist(kps[R_EL], kps[R_WR])
+
+    L_upper_leg = dist(kps[L_HIP], kps[L_KNEE])
+    L_lower_leg = dist(kps[L_KNEE], kps[L_ANK])
+    R_upper_leg = dist(kps[R_HIP], kps[R_KNEE])
+    R_lower_leg = dist(kps[R_KNEE], kps[R_ANK])
+
+    # helper
+    def check_ratio(name, a, b, min_r, max_r):
+        if a is None or b is None or a == 0 or b == 0:
+            return
+        r = a / b
+        if r < min_r or r > max_r:
+            issues.append({
+                "rule": f"{name}_ratio_out_of_range",
+                "severity": "WARNING",
+                "value": float(r)
+            })
+
+    check_ratio("left_arm",  L_upper_arm, L_lower_arm, 0.7, 1.5)
+    check_ratio("right_arm", R_upper_arm, R_lower_arm, 0.7, 1.5)
+
+    check_ratio("left_leg",  L_upper_leg, L_lower_leg, 0.8, 1.6)
+    check_ratio("right_leg", R_upper_leg, R_lower_leg, 0.8, 1.6)
+
+    return issues
 
 
-RULES = [rule_validity, rule_anatomy, rule_angles]
+def rule_topology(kps):
+    """Check that joints lie between their parent and child (topological consistency)."""
+    issues = []
+
+    chains = [
+        ("left_arm_chain", 11, 13, 15),
+        ("right_arm_chain", 12, 14, 16),
+        ("left_leg_chain", 23, 25, 27),
+        ("right_leg_chain", 24, 26, 28),
+    ]
+
+    for name, a, b, c in chains:
+        A, B, C = kps[a], kps[b], kps[c]
+        if A is None or B is None or C is None:
+            continue
+
+        AB = dist(A, B)
+        BC = dist(B, C)
+        AC = dist(A, C)
+
+        if AB is None or BC is None or AC is None:
+            continue
+
+        if AB + BC < AC * 0.7: 
+            issues.append({
+                "rule": f"{name}_broken_chain",
+                "severity": "ERROR",
+                "value": float(AB + BC - AC)
+            })
+
+    return issues
+
+
+def rule_forward_bend(kps):
+    """Rules for forward bends (perspective-safe)."""
+    issues = []
+
+    NOSE = 0
+    L_SH, R_SH = 11, 12
+    L_HIP, R_HIP = 23, 24
+
+    nose = kps[NOSE]
+    sh_center = np.mean([kps[L_SH], kps[R_SH]], axis=0) if kps[L_SH] and kps[R_SH] else None
+    hip_center = np.mean([kps[L_HIP], kps[R_HIP]], axis=0) if kps[L_HIP] and kps[R_HIP] else None
+
+    if nose is None or sh_center is None or hip_center is None:
+        return issues
+
+    spine_len = dist(sh_center, hip_center)
+    if spine_len is not None and spine_len > 0.6:  # too long = broken spine
+        issues.append({
+            "rule": "spine_discontinuity_forward_bend",
+            "severity": "WARNING",
+            "value": float(spine_len)
+        })
+
+    if sh_center[1] > hip_center[1] + 0.15:
+        issues.append({
+            "rule": "shoulders_below_hips_unexpected",
+            "severity": "WARNING",
+            "value": float(sh_center[1] - hip_center[1])
+        })
+
+    if dist(nose, sh_center) and dist(nose, sh_center) > 0.5:
+        issues.append({
+            "rule": "head_position_unrealistic_forward_bend",
+            "severity": "WARNING"
+        })
+
+    return issues
+
+
+
+
+RULES = [rule_validity, rule_anatomy, rule_angles, rule_proportions, rule_topology, rule_forward_bend]
 
 def check_pose(kps):
     all_issues = []
