@@ -12,8 +12,8 @@ import numpy as np
 
 MANUAL_PATH = r"data_annotation\manual_annotation.json"
 PREANNOT_PATH = r"data_annotation\preannotations.json"
-OUTPUT_CSV = r"valid_data.csv"
-GOAL_TYPE = "valid"
+OUTPUT_CSV = r"test_data.csv"
+GOAL_TYPE = "test"
 
 
 if PREANNOT_PATH is None or not os.path.exists(PREANNOT_PATH):
@@ -51,9 +51,9 @@ POSE_TO_CLASS = {"Bound_Angle": 0,
                  "Downward-Facing_Dog": 2, 
                  "Mountain": 3, 
                  "Tree": 4, 
-                 "Upward_Bow": 5, 
-                 "Boat": 6, 
-                 "Upward-Facing_Dog": 7 }
+                 "Upward_Bow": 5,  
+                 "Upward-Facing_Dog": 6,
+                 "Upward-facing_Dog": 6}
 
 rows = []
 
