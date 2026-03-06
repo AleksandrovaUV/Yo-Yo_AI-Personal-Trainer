@@ -41,5 +41,4 @@ for ftype in os.listdir(INPUT_DIR):
                 normalize_image(src, dst)
                 file_list.append(dst)
 
-print("Предобработка изображений прошла успешно. Количество изображений:", len(file_list))
 
