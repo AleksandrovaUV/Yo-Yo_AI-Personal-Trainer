@@ -12,8 +12,8 @@ import numpy as np
 
 MANUAL_PATH = r"data_annotation\manual_annotation.json"
 PREANNOT_PATH = r"data_annotation\preannotations.json"
-OUTPUT_CSV = r"test_data.csv"
-GOAL_TYPE = "test"
+OUTPUT_CSV = r"train_data.csv"
+GOAL_TYPE = "train"
 
 
 if PREANNOT_PATH is None or not os.path.exists(PREANNOT_PATH):
@@ -89,6 +89,9 @@ for item in data_man:
             continue
 
         clean_kps.append([float(x), float(y)])
+    
+    while len(clean_kps) < len(KEYPOINT_NAMES):
+        clean_kps.append([np.nan, np.nan])
 
     kps = np.array(clean_kps, dtype=float)
 
@@ -136,6 +139,9 @@ for item in data_prean:
             continue
 
         clean_kps.append([float(x), float(y)])
+
+    while len(clean_kps) < len(KEYPOINT_NAMES):
+        clean_kps.append([np.nan, np.nan])
 
     kps = np.array(clean_kps, dtype=float)
 
