@@ -62,7 +62,7 @@ YO-YO_AI-PERSONAL-TRAINER/
 │   │   └── gcn_dataset_valid.npz
 │   ├── ... (другие файлы модели)
 │
-├── movenet/                        # модель MoveNet (весы, графы)
+├── movenet/ # модель MoveNet (весы, графы)
 │
 ├── prepared_data/                  # изображения, подготовленные к разметке
 │
@@ -70,7 +70,7 @@ YO-YO_AI-PERSONAL-TRAINER/
 ├── graph_opt.pb
 ├── hpe_test_ez
 ├── LICENSE
-├── README.md                       # будет заменён на новый
+├── README.md
 ├── test_data.csv
 ├── TEST_DELETE.py
 ├── train_data.csv
@@ -125,7 +125,19 @@ python data_annotation/interactive_module.py
 ```
 python model_0.1/data_procession.ipynb
 ```
+
 ## Результаты первичного тестирования
+
+<img width="1280" height="720" alt="model_results" src="https://github.com/user-attachments/assets/77ba9f70-36ac-4573-bd8e-52b82c0bb8fc" />
+
+<img width="1189" height="490" alt="loss_accuracy" src="https://github.com/user-attachments/assets/0017ae50-9b47-4f8b-91e6-8de15c7c57d6" />
+
+<img width="742" height="580" alt="calibration_curve" src="https://github.com/user-attachments/assets/83879764-a769-4443-863a-0083f46cb221" />
+
+<img width="1280" height="720" alt="normalization" src="https://github.com/user-attachments/assets/b692bd92-9bf8-4077-a1de-95351ce17cbd" />
+
+<img width="1416" height="1219" alt="errors_examples" src="https://github.com/user-attachments/assets/3dd228de-58da-418d-86e4-9f80c612bdb9" />
+
 
 ### Реализовано
 - полуавтоматическая разметка (предразметка + интерактивная коррекция),
