@@ -1,0 +1,14 @@
+numpy
+scipy
+pandas
+matplotlib
+opencv-python
+mediapipe
+torch
+torchvision
+torchaudio
+torch-geometric
+scikit-learn
+tqdm
+notebook
+tk
