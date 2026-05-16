@@ -20,18 +20,20 @@ def angle(a, b, c):
     cosang = np.clip(cosang, -1.0, 1.0)
     return np.degrees(np.arccos(cosang))
 
+not_my_kps = [1,3,4,6,7,8,9,10,21,22]
 
 def rule_validity(kps):
     """coordiantes validity."""
     issues = []
 
     for i, kp in enumerate(kps):
-        if kp is None:
-            issues.append({"rule": f"kp_{i}_missing", "severity": "ERROR"})
-            continue
-        x, y = kp
-        if not (0 <= x <= 1 and 0 <= y <= 1):
-            issues.append({"rule": f"kp_{i}_out_of_bounds", "severity": "ERROR"})
+        if i not in not_my_kps:
+            if kp is None:
+                issues.append({"rule": f"kp_{i}_missing", "severity": "ERROR"})
+                continue
+            x, y = kp
+            if not (0 <= x <= 1 and 0 <= y <= 1):
+                issues.append({"rule": f"kp_{i}_out_of_bounds", "severity": "ERROR"})
 
     if sum(k is None for k in kps) > len(kps) * 0.3:
         issues.append({"rule": "too_many_missing_keypoints", "severity": "ERROR"})
@@ -42,7 +44,6 @@ def rule_validity(kps):
 def rule_anatomy(kps):
     issues = []
 
-    # MediaPipe
     L_SH, R_SH = 11, 12
     L_EL, R_EL = 13, 14
     L_WR, R_WR = 15, 16
@@ -151,7 +152,7 @@ def rule_proportions(kps):
 
 
 def rule_topology(kps):
-    """Check that joints lie between their parent and child (topological consistency)."""
+    """Check that joints lie between their parent and child."""
     issues = []
 
     chains = [
@@ -184,7 +185,7 @@ def rule_topology(kps):
 
 
 def rule_forward_bend(kps):
-    """Rules for forward bends (perspective-safe)."""
+    """Rules for forward bends."""
     issues = []
 
     NOSE = 0

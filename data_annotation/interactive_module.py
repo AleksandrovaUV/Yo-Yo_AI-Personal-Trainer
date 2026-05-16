@@ -3,7 +3,7 @@ import json
 import cv2 
 import numpy as np
 from tkinter import Tk, filedialog
-
+import iterative_module
 
 
 '''
@@ -287,7 +287,7 @@ class Poser():
     run:
     '''
 
-    def __init__(self, img_path, flag = True):
+    def __init__(self, img_path, flag = True, enable_check=False):
 
         '''
         :param img_path: path to an image
@@ -323,12 +323,13 @@ class Poser():
 
         self.panning = False # image dragging
         self.panning_start = (0,0)
+        self.enable_check = enable_check
     
     def draw_buttons(self, canvas):
         new_y = self.h - BUTTON_HEIGHT
         new_y2 = self.h
 
-        segment = self.w // 4
+        segment = self.w // (5 if self.enable_check else 4)
 
         # save
         save_box = (0, new_y, segment, new_y2)
@@ -352,11 +353,19 @@ class Poser():
                     cv2.FONT_HERSHEY_DUPLEX, 1, BUTTON_TEXT_COLOR, 2)
 
         # delete
-        del_box = (3 * segment, new_y, self.w, new_y2)
+        del_box = (3 * segment, new_y, 4 * segment, new_y2)
         self.buttons["delete"] = del_box
         cv2.rectangle(canvas, (del_box[0], del_box[1]), (del_box[2], del_box[3]), (120, 0, 0), -1)
         cv2.putText(canvas, "Delete", (del_box[0] + 30, new_y + 40),
                     cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+        
+        if self.enable_check:
+            # check again
+            check_box = (4 * segment, new_y, self.w, new_y2)
+            self.buttons["check"] = check_box
+            cv2.rectangle(canvas, (check_box[0], check_box[1]), (check_box[2], check_box[3]), BUTTON_COLOR, -1)
+            cv2.putText(canvas, "Check", (check_box[0] + 40, new_y + 40),
+                        cv2.FONT_HERSHEY_DUPLEX, 1, BUTTON_TEXT_COLOR, 2)
 
         return canvas
 
@@ -540,6 +549,63 @@ class Poser():
                 print("Preannotation removed.")
                 state["clicked"] = None
 
+            elif state["clicked"] == "check":
+
+                normed_23 = []
+                for x, y in self.points:
+                    if x is None or y is None:
+                        normed_23.append(None)
+                    else:
+                        normed_23.append([x / self.w, y / self.h])
+
+                kps33 = [None] * 33
+
+
+                for i, name in enumerate(KEYPOINT_NAMES):
+                    if name in MP_MAPPING:
+                        mp_idx = MP_MAPPING[name]   # MediaPipe
+                        if mp_idx < len(kps33):
+                            kps33[mp_idx] = normed_23[i]
+
+                result = iterative_module.check_pose(kps33)
+                status = result["status"]
+                issues = result["issues"]
+
+                print(f"Status: {status}")
+                if issues:
+                    for issue in issues:
+                        print(f" - {issue['rule']} ({issue['severity']})")
+                else:
+                    print("No issues found.")
+
+                if os.path.exists(PREANNOTATIONS_JSON):
+                    with open(PREANNOTATIONS_JSON, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                else:
+                    data = []
+
+                updated = False
+                for item in data:
+                    if item["image"] == self.img_path:
+                        item["status"] = status
+                        item["issues"] = issues
+                        updated = True
+                        break
+
+                if not updated:
+                    data.append({
+                        "image": self.img_path,
+                        "status": status,
+                        "issues": issues
+                    })
+
+                with open(PREANNOTATIONS_JSON, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+
+                state["clicked"] = None
+
+
+
 
 
 def main():
@@ -576,7 +642,7 @@ def main():
 
         while index < len(all_paths):
 
-            poser = Poser(all_paths[index], flag)
+            poser = Poser(all_paths[index], flag, enable_check=False)
             button_click = poser.run()
 
             if button_click == "next":
@@ -623,7 +689,7 @@ def main():
                 else:
                     print("No errors.")
 
-            poser = Poser(img_path, flag = True)
+            poser = Poser(img_path, flag = True, enable_check=True)
             button_click = poser.run()
 
             if button_click == "next":
